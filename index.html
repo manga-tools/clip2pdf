@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clip → PDF / 画像</title>
+
+<meta name="description" content="CLIP STUDIO を立ち上げずに、.clip から PDF と PNG を作るブラウザアプリ。">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clip → PDF">
+<meta property="og:title" content="Clip → PDF">
+<meta property="og:description" content="ブラウザにドロップするだけ。CLIP STUDIO を立ち上げずに PDF と PNG に。">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:url" content="https://manga-tools.github.io/clip2pdf/">
+<meta property="og:image" content="https://manga-tools.github.io/clip2pdf/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Clip → PDF">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Clip → PDF">
+<meta name="twitter:description" content="ブラウザにドロップするだけ。">
+<meta name="twitter:image" content="https://manga-tools.github.io/clip2pdf/og.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234c8dff'/%3E%3Crect x='9' y='7' width='14' height='18' rx='2' fill='%23fff'/%3E%3Crect x='12' y='11' width='8' height='2' fill='%234c8dff'/%3E%3Crect x='12' y='15' width='8' height='2' fill='%234c8dff'/%3E%3Crect x='12' y='19' width='5' height='2' fill='%234c8dff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#14161a; --panel:#1c1f26; --panel2:#232733; --line:#333947;
+    --fg:#e8eaf0; --muted:#9aa3b2; --accent:#4c8dff; --accent2:#ffb020; --bad:#ff5c5c;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.6 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+       display:flex;flex-direction:column;overflow:hidden}
+
+  header{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:600}
+  .hint{color:var(--muted);font-size:12px}
+  .sp{flex:1}
+
+  .bar{padding:6px 14px;border-bottom:1px solid var(--line);background:var(--panel);
+       display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .bar label{display:flex;align-items:center;gap:5px;white-space:nowrap}
+
+  button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:7px;
+         padding:5px 10px;cursor:pointer;font-size:12px;white-space:nowrap}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.warn{color:#ff9a9a}
+  button[disabled]{opacity:.35;cursor:default}
+  button[disabled]:hover{border-color:var(--line)}
+  input[type=number],input[type=text],select{background:var(--panel2);color:var(--fg);
+         border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px}
+  input[type=text]{width:150px}
+  input[type=number]{width:64px}
+
+  main{flex:1;overflow:auto;padding:14px;min-height:0}
+
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:24px 16px;text-align:center;
+        color:var(--muted);cursor:pointer;min-height:calc(100vh - 190px);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+  .drop.over{border-color:var(--accent);color:var(--fg);background:#1a2233}
+  .drop b{font-size:16px;color:var(--fg);font-weight:600}
+  body.dragging main{outline:2px dashed var(--accent);outline-offset:-6px}
+
+  .grid{display:flex;flex-wrap:wrap;gap:12px;align-content:flex-start}
+  .card{width:170px;background:var(--panel);border:1px solid var(--line);border-radius:9px;
+        padding:8px;cursor:grab;position:relative;transition:border-color .1s}
+  .card.drag{opacity:.35}
+  .card.over{border-color:var(--accent)}
+  .card.bad{opacity:.5;border-style:dashed;border-color:var(--bad)}
+  .card .thumb{background:#fff;border-radius:5px;height:170px;display:flex;align-items:center;
+        justify-content:center;overflow:hidden;margin-bottom:6px}
+  .card .thumb img{max-width:100%;max-height:100%;display:block;-webkit-user-drag:none}
+  .card .thumb.empty{background:#0f1116;color:var(--bad);font-size:12px}
+  .card .no{position:absolute;top:4px;left:4px;background:var(--accent);color:#fff;font-size:11px;
+        font-weight:700;line-height:18px;padding:0 6px;border-radius:5px}
+  .card .x{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;
+        line-height:18px;padding:0 6px;border-radius:5px;cursor:pointer;display:none}
+  .card:hover .x{display:block}
+  .card .nm{font-size:11px;color:var(--fg);word-break:break-all;line-height:1.35;
+        display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .card .px{font-size:11px;color:var(--muted);margin-top:2px}
+
+  #status{padding:6px 14px;border-top:1px solid var(--line);background:var(--panel);
+          font-size:12px;color:var(--muted);min-height:31px;display:flex;align-items:center;gap:8px}
+  #status.err{color:#ff9a9a}
+  .note{color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Clip → PDF / 画像</h1>
+  <span class="hint">.clip のプレビュー画像を取り出して PDF・PNG にします</span>
+  <span class="sp"></span>
+  <span class="note">ファイルはブラウザ内だけで処理され、どこにも送信されません</span>
+</header>
+
+<div class="bar">
+  <button id="btnAdd">ファイルを追加</button>
+  <button id="btnClear" class="warn" disabled>クリア</button>
+  <span style="width:1px;height:18px;background:var(--line)"></span>
+  <label>出力名 <input type="text" id="outName" value="clip" spellcheck="false"></label>
+  <label>範囲
+    <select id="cropMode">
+      <option value="trim">仕上がり（トンボの内側）</option>
+      <option value="bleed">仕上がり＋裁ち落とし</option>
+      <option value="full">キャンバス全体</option>
+    </select>
+  </label>
+  <label>ページ幅 <input type="number" id="pageW" value="210" min="10" max="2000" step="1"> mm</label>
+  <label>画質
+    <select id="quality">
+      <option value="png">PNG 無変換（推奨）</option>
+      <option value="jpeg92">JPEG 高（軽くする）</option>
+      <option value="jpeg80">JPEG 標準（最も軽い）</option>
+    </select>
+  </label>
+  <span class="sp"></span>
+  <button id="btnDiag">診断</button>
+  <button id="btnPdf" class="primary" disabled>PDF を保存</button>
+  <button id="btnZip" disabled>画像を ZIP で保存</button>
+</div>
+
+<main>
+  <div id="drop" class="drop">
+    <b>.clip をここにドロップ</b>
+    <span>複数まとめてOK／フォルダごとでもOK</span>
+    <span>クリックして選ぶこともできます</span>
+  </div>
+  <div id="grid" class="grid" style="display:none"></div>
+</main>
+
+<div id="status">.clip ファイルを読み込んでください</div>
+
+<input type="file" id="picker" accept=".clip" multiple hidden>
+
+<script src="vendor/sql-wasm.js"></script>
+<script src="vendor/sql-wasm-binary.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const drop = $('#drop'), grid = $('#grid'), picker = $('#picker'), statusEl = $('#status');
+const collator = new Intl.Collator(undefined, {numeric:true, sensitivity:'base'});
+
+let items = [];      // {name, ok, blob, url, img, w, h}
+let SQL = null;      // sql.js モジュール
+let busy = false;
+
+function say(msg, isErr){ statusEl.textContent = msg; statusEl.classList.toggle('err', !!isErr); }
+
+// 例外を黙って落とさない。file:// では DevTools を開かない人が多いので画面に出す。
+window.addEventListener('error', e =>
+  say('エラー: ' + (e.message || e.error) + ' @ ' + (e.filename || '').split('/').pop() + ':' + e.lineno, true));
+window.addEventListener('unhandledrejection', e =>
+  say('エラー(非同期): ' + ((e.reason && e.reason.message) || e.reason), true));
+
+/* ---------- .clip から SQLite DB を切り出す ---------- */
+
+function indexOfSeq(hay, needle, from){
+  const n0 = needle[0], last = hay.length - needle.length;
+  outer: for(let i = from|0; i <= last; i++){
+    if(hay[i] !== n0) continue;
+    for(let j = 1; j < needle.length; j++) if(hay[i+j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+const ascii = s => Uint8Array.from(s, c => c.charCodeAt(0));
+const TAG_CHUNK  = ascii('CHNKSQLi');
+const TAG_SQLITE = ascii('SQLite format 3\0');
+
+function extractDb(u8){
+  // CHNKSQLi チャンク: タグ8バイト + サイズ8バイト(BE) + DB本体
+  let i = indexOfSeq(u8, TAG_CHUNK, 0);
+  if(i !== -1){
+    const dv = new DataView(u8.buffer, u8.byteOffset + i + 8, 8);
+    const size = Number(dv.getBigUint64(0, false));
+    if(size > 0 && i + 16 + size <= u8.length) return u8.subarray(i + 16, i + 16 + size);
+  }
+  // タグが無い場合は SQLite ヘッダから末尾まで
+  i = indexOfSeq(u8, TAG_SQLITE, 0);
+  return i !== -1 ? u8.subarray(i) : null;
+}
+
+/* ---------- プレビュー画像を取り出す ---------- */
+
+function loadImage(blob){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload  = () => res({img, url});
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('decode failed')); };
+    img.src = url;
+  });
+}
+
+/* トンボ（仕上がり枠・裁ち落とし）の情報を読む。
+   古い .clip には CropFrame 系の列自体が無いので、列の有無から確認する。 */
+function readCropInfo(db){
+  try{
+    const t = db.exec('PRAGMA table_info(Canvas)');
+    if(!t.length) return null;
+    const cols = new Set(t[0].values.map(v => v[1]));
+    const need = ['CanvasWidth', 'CanvasHeight', 'CropFrameWidth', 'CropFrameHeight'];
+    if(!need.every(c => cols.has(c))) return null;
+
+    const opt = ['CropFrameDitch', 'CanvasUnit', 'CropFrameUnitKind'].filter(c => cols.has(c));
+    const sel = need.concat(opt);
+    const r = db.exec('SELECT ' + sel.join(',') + ' FROM Canvas LIMIT 1');
+    if(!r.length || !r[0].values.length) return null;
+    const v = {};
+    sel.forEach((c, n) => v[c] = r[0].values[0][n]);
+    const cw = v.CanvasWidth, ch = v.CanvasHeight, fw = v.CropFrameWidth, fh = v.CropFrameHeight;
+
+    if(!(cw > 0 && ch > 0 && fw > 0 && fh > 0 && fw <= cw && fh <= ch)) return null;
+
+    // キャンバスと仕上がりで単位が違うと比率が意味を成さない（px 対 mm など）。
+    // 環境によって単位設定が変わりうるので、食い違うときは切り出しを諦める。
+    if(v.CanvasUnit != null && v.CropFrameUnitKind != null && v.CanvasUnit !== v.CropFrameUnitKind)
+      return null;
+
+    // 単位列が無い世代向けの保険。仕上がりがキャンバスの 3 割未満になるのは
+    // 単位の取り違えとみなす（実データはどれも 8 割前後）。
+    if(fw / cw < 0.3 || fh / ch < 0.3) return null;
+
+    const ditch = v.CropFrameDitch;
+    return {cw, ch, fw, fh, ditch: ditch > 0 ? ditch : 0};
+  }catch(_){ return null; }
+}
+
+/* 切り出し範囲をプレビュー画像のピクセル座標で返す。トンボは中央に置かれる前提。 */
+function cropRect(it, mode){
+  if(mode === 'full' || !it.crop) return null;
+  const {cw, ch, fw, fh, ditch} = it.crop;
+  const tw = mode === 'bleed' ? fw + 2 * ditch : fw;
+  const th = mode === 'bleed' ? fh + 2 * ditch : fh;
+  if(!(tw > 0 && th > 0 && tw <= cw && th <= ch)) return null;
+  const sw = Math.max(1, Math.round(tw / cw * it.w));
+  const sh = Math.max(1, Math.round(th / ch * it.h));
+  return {sx: Math.round((it.w - sw) / 2), sy: Math.round((it.h - sh) / 2), sw, sh};
+}
+
+async function extractPreview(file){
+  const u8 = new Uint8Array(await file.arrayBuffer());
+  const dbBytes = extractDb(u8);
+  if(!dbBytes) throw new Error('SQLite が見つかりません');
+
+  const db = new SQL.Database(dbBytes);
+  const crop = readCropInfo(db);
+  let st;
+  try{
+    // 面積の大きいものから試す（Python 版と同じ方針）。
+    // 1行ずつ取り出す。BLOB を全行まとめて JS 側に持つとメモリを食うため。
+    st = db.prepare(
+      "SELECT ImageData FROM CanvasPreview " +
+      "WHERE ImageData IS NOT NULL ORDER BY ImageWidth * ImageHeight DESC"
+    );
+  }catch(e){
+    db.close();
+    throw new Error('CanvasPreview が読めません');
+  }
+
+  try{
+    while(st.step()){
+      // .clip の中身は PNG。生バイトを保持しておき、PDF/ZIP では無変換で使う。
+      const raw = st.get()[0];
+      const blob = new Blob([raw], {type: 'image/png'});
+      try{
+        const {img, url} = await loadImage(blob);
+        return {raw, blob, img, url, crop, w: img.naturalWidth, h: img.naturalHeight};
+      }catch(_){ /* 次の候補へ */ }
+    }
+  } finally {
+    try{ st.free(); }catch(_){}
+    db.close();
+  }
+
+  throw new Error('プレビュー画像がありません');
+}
+
+/* ---------- 読み込み ---------- */
+
+async function ensureSQL(){
+  if(SQL) return SQL;
+  say('SQLite エンジンを準備中…');
+  // wasm は base64 で同梱してある。fetch しないので file:// でもそのまま動く。
+  const bin = Uint8Array.from(atob(window.SQL_WASM_B64), c => c.charCodeAt(0));
+  SQL = await initSqlJs({wasmBinary: bin});
+  return SQL;
+}
+
+async function addFiles(files){
+  const clips = files.filter(f => f.name.toLowerCase().endsWith('.clip'));
+  if(!clips.length){ say('.clip ファイルが見つかりませんでした', true); return; }
+
+  busy = true; sync();
+  try{
+    await ensureSQL();
+  }catch(e){
+    busy = false; sync();
+    say('SQLite エンジンの読み込みに失敗しました: ' + e.message, true);
+    return;
+  }
+
+  clips.sort((a, b) => collator.compare(a.name, b.name));
+
+  let done = 0, failed = 0;
+  for(const f of clips){
+    say(`読み込み中… ${done + failed + 1} / ${clips.length}  ${f.name}`);
+    await new Promise(r => setTimeout(r));   // 画面を更新させる
+    try{
+      const p = await extractPreview(f);
+      items.push({name: f.name, ok: true, ...p});
+      done++;
+    }catch(e){
+      items.push({name: f.name, ok: false, err: e.message});
+      failed++;
+    }
+    render();
+  }
+
+  busy = false;
+  render(); sync();
+  say(failed ? `${done} 件を読み込みました（${failed} 件は画像を取り出せませんでした）`
+             : `${done} 件を読み込みました`, failed > 0);
+}
+
+/* ドロップされた項目からファイルを集める（フォルダ対応） */
+async function filesFromDataTransfer(dt){
+  const entries = [], direct = [];
+  // ここは同期で回しきる（await を挟むと DataTransfer が無効になる）
+  for(const it of (dt.items || [])){
+    if(it.kind !== 'file') continue;
+    const e = it.webkitGetAsEntry ? it.webkitGetAsEntry() : null;
+    if(e) entries.push(e);
+    else if(it.getAsFile){ const f = it.getAsFile(); if(f) direct.push(f); }
+  }
+  if(!entries.length) return direct.length ? direct : Array.from(dt.files || []);
+
+  const out = [];
+  async function walk(entry){
+    if(entry.isFile){
+      out.push(await new Promise((res, rej) => entry.file(res, rej)));
+    }else if(entry.isDirectory){
+      const reader = entry.createReader();
+      for(;;){
+        const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        if(!batch.length) break;
+        for(const c of batch) await walk(c);
+      }
+    }
+  }
+  for(const e of entries){
+    try{ await walk(e); }catch(_){ /* 読めない項目は飛ばす */ }
+  }
+  return out.length ? out : Array.from(dt.files || []);
+}
+
+/* ---------- 表示 ---------- */
+
+function render(){
+  const has = items.length > 0;
+  drop.style.display = has ? 'none' : 'flex';
+  grid.style.display = has ? 'flex' : 'none';
+  if(!has){ grid.innerHTML = ''; return; }
+
+  const cmode = $('#cropMode').value;
+  grid.innerHTML = '';
+  items.forEach((it, i) => {
+    const rect = it.ok ? cropRect(it, cmode) : null;
+    const el = document.createElement('div');
+    el.className = 'card' + (it.ok ? '' : ' bad');
+    el.draggable = true;
+    el.dataset.i = i;
+    // サムネイルは実際に書き出される範囲を表示する
+    const thumb = it.ok
+      ? (rect ? draw(it, rect).toDataURL('image/jpeg', 0.7) : it.url)
+      : null;
+    const size = rect ? `${rect.sw} × ${rect.sh}` : (it.ok ? `${it.w} × ${it.h}` : (it.err || ''));
+    const tag = !it.ok ? '' :
+      cmode === 'full' ? '' :
+      rect ? '' : ' <span style="color:var(--accent2)">トンボ情報なし</span>';
+    el.innerHTML = `
+      <div class="no">${i + 1}</div>
+      <div class="x" title="除外">×</div>
+      <div class="thumb${it.ok ? '' : ' empty'}">${
+        it.ok ? `<img src="${thumb}" alt="">` : '画像なし'}</div>
+      <div class="nm"></div>
+      <div class="px">${size}${tag}</div>`;
+    el.querySelector('.nm').textContent = it.name;
+    el.querySelector('.x').onclick = ev => {
+      ev.stopPropagation();
+      const [rm] = items.splice(i, 1);
+      if(rm.url) URL.revokeObjectURL(rm.url);
+      render(); sync();
+    };
+    grid.appendChild(el);
+  });
+}
+
+/* 並べ替え */
+let dragIdx = null;
+grid.addEventListener('dragstart', e => {
+  const c = e.target.closest('.card'); if(!c) return;
+  dragIdx = +c.dataset.i; c.classList.add('drag');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '');   // Firefox 対策
+});
+grid.addEventListener('dragend', () => {
+  dragIdx = null;
+  grid.querySelectorAll('.card').forEach(c => c.classList.remove('drag', 'over'));
+});
+grid.addEventListener('dragover', e => {
+  if(dragIdx === null) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  const c = e.target.closest('.card');
+  grid.querySelectorAll('.card').forEach(x => x.classList.toggle('over', x === c));
+});
+grid.addEventListener('drop', e => {
+  if(dragIdx === null) return;
+  e.preventDefault(); e.stopPropagation();
+  const c = e.target.closest('.card'); if(!c) return;
+  const to = +c.dataset.i;
+  const [moved] = items.splice(dragIdx, 1);
+  items.splice(to, 0, moved);
+  dragIdx = null;
+  render();
+});
+
+function sync(){
+  const n = items.filter(i => i.ok).length;
+  $('#btnPdf').disabled = busy || n === 0;
+  $('#btnZip').disabled = busy || n === 0;
+  $('#btnClear').disabled = busy || items.length === 0;
+  $('#btnAdd').disabled = busy;
+}
+
+/* ---------- 出力 ---------- */
+
+function draw(it, rect){
+  const r = rect || {sx: 0, sy: 0, sw: it.w, sh: it.h};
+  const c = document.createElement('canvas');
+  c.width = r.sw; c.height = r.sh;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);   // 透過部分は白地に（JPEG 対策）
+  g.drawImage(it.img, r.sx, r.sy, r.sw, r.sh, 0, 0, r.sw, r.sh);
+  return c;
+}
+
+function encode(it, mode, rect){
+  // 切り出し無しの PNG は .clip 内のバイトをそのまま渡す（デコードも再圧縮もしない）
+  if(mode === 'png' && !rect) return {data: it.raw, fmt: 'PNG'};
+  const c = draw(it, rect);
+  return mode === 'png'
+    ? {data: c.toDataURL('image/png'), fmt: 'PNG'}   // 切り出すと再エンコードは避けられない（可逆）
+    : {data: c.toDataURL('image/jpeg', mode === 'jpeg92' ? 0.92 : 0.8), fmt: 'JPEG'};
+}
+
+/* 保存先ダイアログ。Chrome / Edge のみ対応で、Safari・Firefox には無い。
+   重要: ユーザー操作の直後にしか開けないので、PDF の生成より「先に」呼ぶこと。
+   （生成に数秒かかるとクリックの有効期限が切れて例外になる） */
+async function pickSave(name, mime, ext){
+  if(!window.showSaveFilePicker) return null;          // 非対応 → 通常ダウンロードへ
+  try{
+    return await window.showSaveFilePicker({
+      suggestedName: name,
+      types: [{description: ext.toUpperCase().slice(1), accept: {[mime]: [ext]}}]
+    });
+  }catch(e){
+    if(e && e.name === 'AbortError') return 'cancel';  // ユーザーが閉じた
+    return null;                                        // file:// で塞がれている等 → フォールバック
+  }
+}
+
+async function saveBlob(blob, name, handle){
+  if(handle && handle !== 'cancel'){
+    try{
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      return;
+    }catch(_){ /* 書き込めなければ通常ダウンロードへ落とす */ }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const outBase = () => ($('#outName').value.trim() || 'clip');
+
+$('#btnPdf').onclick = async () => {
+  const list = items.filter(i => i.ok);
+  if(!list.length) return;
+
+  // 生成前に保存先を聞く（クリック直後でないとダイアログを開けないため）
+  const handle = await pickSave(outBase() + '.pdf', 'application/pdf', '.pdf');
+  if(handle === 'cancel'){ say('保存をキャンセルしました'); return; }
+
+  let W = Math.max(10, +$('#pageW').value || 210);
+  const mode = $('#quality').value;
+
+  // PDF の 1 ページは 14400pt（5080mm）が上限。webtoon のような極端な縦長だと
+  // 指定幅のままでは超えるので、幅を全ページ一律で縮めて収める。
+  // （はみ出すページだけ細くすると、幅が揃わなくなって元の問題に逆戻りする）
+  const cmode = $('#cropMode').value;
+  const rects = list.map(i => cropRect(i, cmode));
+  const dims = list.map((i, n) => rects[n] ? {w: rects[n].sw, h: rects[n].sh} : {w: i.w, h: i.h});
+
+  const MAX_MM = 14400 / (72 / 25.4);
+  const maxRatio = Math.max(...dims.map(d => d.h / d.w));
+  let shrunk = false;
+  if(W * maxRatio > MAX_MM){
+    W = Math.floor(MAX_MM / maxRatio * 10) / 10;
+    shrunk = true;
+  }
+
+  busy = true; sync();
+  try{
+    const {jsPDF} = window.jspdf;
+    let doc = null;
+
+    for(let i = 0; i < list.length; i++){
+      const it = list[i];
+      say(`PDF を作成中… ${i + 1} / ${list.length}`);
+      await new Promise(r => setTimeout(r));
+
+      // ページ高さは各画像の縦横比から決める（幅は全ページ共通）
+      const H = W * dims[i].h / dims[i].w;
+      const orient = H >= W ? 'p' : 'l';
+      if(i === 0) doc = new jsPDF({unit: 'mm', format: [W, H], orientation: orient, compress: true});
+      else        doc.addPage([W, H], orient);
+
+      const {data, fmt} = encode(it, mode, rects[i]);
+      doc.addImage(data, fmt, 0, 0, W, H);
+    }
+
+    await saveBlob(doc.output('blob'), outBase() + '.pdf', handle);
+    const dpi = Math.min(...dims.map(d => d.w / (W / 25.4)));
+    const noCrop = cmode !== 'full' && rects.filter(r => !r).length;
+    say(`PDF を保存しました（${list.length} ページ／幅 ${W}mm 統一`
+      + (shrunk ? `。PDF の上限 5080mm に収めるため幅を自動調整しました` : '')
+      + `／最も粗いページで約 ${Math.round(dpi)}dpi`
+      + (noCrop ? `／${noCrop} ページはトンボ情報が無くキャンバス全体` : '') + '）',
+      shrunk || noCrop > 0);
+  }catch(e){
+    say('PDF の作成に失敗しました: ' + e.message, true);
+  }finally{
+    busy = false; sync();
+  }
+};
+
+$('#btnZip').onclick = async () => {
+  const list = items.filter(i => i.ok);
+  if(!list.length) return;
+
+  const handle = await pickSave(outBase() + '.zip', 'application/zip', '.zip');
+  if(handle === 'cancel'){ say('保存をキャンセルしました'); return; }
+
+  busy = true; sync();
+  try{
+    const zip = new JSZip();
+    const pad = String(list.length).length;
+    const cmode = $('#cropMode').value;
+    for(let i = 0; i < list.length; i++){
+      const it = list[i], rect = cropRect(it, cmode);
+      const base = it.name.replace(/\.clip$/i, '');
+      const nm = `${String(i + 1).padStart(pad, '0')}_${base}.png`;
+      if(!rect){
+        // .clip 内の画像データをそのまま格納（再エンコードしないので劣化なし）
+        zip.file(nm, it.blob);
+      }else{
+        say(`切り出し中… ${i + 1} / ${list.length}`);
+        await new Promise(r => setTimeout(r));
+        const b = await new Promise(res => draw(it, rect).toBlob(res, 'image/png'));
+        zip.file(nm, b);
+      }
+    }
+    say('ZIP を作成中…');
+    const blob = await zip.generateAsync({type: 'blob'});
+    await saveBlob(blob, outBase() + '.zip', handle);
+    say(`ZIP を保存しました（${list.length} 枚）`);
+  }catch(e){
+    say('ZIP の作成に失敗しました: ' + e.message, true);
+  }finally{
+    busy = false; sync();
+  }
+};
+
+$('#btnClear').onclick = () => {
+  items.forEach(i => i.url && URL.revokeObjectURL(i.url));
+  items = [];
+  render(); sync();
+  say('.clip ファイルを読み込んでください');
+};
+
+/* ---------- 入力 ---------- */
+
+/* 何が動いていないかを画面上で切り分けるための自己診断 */
+$('#btnDiag').onclick = async () => {
+  const L = [];
+  L.push('URL: ' + location.protocol);
+  L.push('UA: ' + (navigator.userAgent.match(/(Chrome|Safari|Firefox|Edg)\/[\d.]+/g) || []).join(' '));
+  L.push('WebAssembly: ' + (typeof WebAssembly === 'object' ? 'あり' : 'なし'));
+  L.push('保存先ダイアログ: ' + (window.showSaveFilePicker ? '使える' : '非対応（ダウンロードフォルダに保存）'));
+  L.push('jsPDF: ' + (window.jspdf ? 'OK' : '読み込み失敗'));
+  L.push('JSZip: ' + (window.JSZip ? 'OK' : '読み込み失敗'));
+  L.push('sql-wasm.js: ' + (typeof initSqlJs === 'function' ? 'OK' : '読み込み失敗'));
+  L.push('wasm(base64): ' + (window.SQL_WASM_B64 ? Math.round(window.SQL_WASM_B64.length / 1024) + 'KB' : '読み込み失敗'));
+
+  try{
+    await ensureSQL();
+    const d = new SQL.Database();
+    d.run('CREATE TABLE t(a); INSERT INTO t VALUES (1)');
+    const v = d.exec('SELECT a FROM t')[0].values[0][0];
+    d.close();
+    L.push('SQLite 実行: ' + (v === 1 ? 'OK' : '異常'));
+  }catch(e){ L.push('SQLite 実行: 失敗 → ' + e.message); }
+
+  // canvas が汚染されないか（file:// だと PDF 書き出しが落ちる原因になりうる）
+  try{
+    const c = document.createElement('canvas'); c.width = c.height = 8;
+    const g = c.getContext('2d'); g.fillStyle = '#f00'; g.fillRect(0, 0, 8, 8);
+    const px = new Uint8Array([0,0,0,0]);
+    const blob = new Blob([Uint8Array.from(atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    ), ch => ch.charCodeAt(0))], {type: 'image/png'});
+    const {img, url} = await loadImage(blob);
+    g.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    c.toDataURL('image/jpeg', 0.9);
+    L.push('canvas 書き出し: OK');
+  }catch(e){ L.push('canvas 書き出し: 失敗 → ' + e.message); }
+
+  alert(L.join('\n'));
+  say(L.join('  /  '));
+};
+
+$('#cropMode').onchange = () => render();
+$('#btnAdd').onclick = () => picker.click();
+drop.onclick = () => picker.click();
+picker.onchange = () => {
+  const fs = Array.from(picker.files);
+  picker.value = '';
+  if(fs.length) addFiles(fs);
+};
+
+let dragDepth = 0;
+window.addEventListener('dragenter', e => {
+  if(dragIdx !== null) return;
+  e.preventDefault();
+  if(++dragDepth === 1){ document.body.classList.add('dragging'); drop.classList.add('over'); }
+});
+window.addEventListener('dragover', e => { if(dragIdx === null) e.preventDefault(); });
+window.addEventListener('dragleave', e => {
+  if(dragIdx !== null) return;
+  if(--dragDepth <= 0){ dragDepth = 0; document.body.classList.remove('dragging'); drop.classList.remove('over'); }
+});
+window.addEventListener('drop', async e => {
+  if(dragIdx !== null) return;
+  e.preventDefault();
+  dragDepth = 0; document.body.classList.remove('dragging'); drop.classList.remove('over');
+  if(busy){ say('処理中です。しばらくお待ちください', true); return; }
+
+  // DataTransfer はイベント終了後に無効になるので、まず同期で取れるものを確保しておく
+  const plain = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+  let files;
+  try{
+    files = await filesFromDataTransfer(e.dataTransfer);
+    if(!files.length) files = plain;
+  }catch(err){
+    say('ドロップの読み取りに失敗したため、通常の方法で再試行します: ' + err.message, true);
+    files = plain;
+  }
+  if(!files.length){ say('ファイルを取得できませんでした。「ファイルを追加」から選んでみてください', true); return; }
+  if(files.length){
+    if($('#outName').value === 'clip'){
+      const first = files.find(f => f.name.toLowerCase().endsWith('.clip'));
+      const dir = first && first.webkitRelativePath ? first.webkitRelativePath.split('/')[0] : '';
+      if(dir) $('#outName').value = dir;
+    }
+    addFiles(files);
+  }
+});
+
+render(); sync();
+</script>
+</body>
+</html>
